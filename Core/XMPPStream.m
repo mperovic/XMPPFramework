@@ -202,6 +202,7 @@ enum XMPPStreamConfig
 	numberOfBytesSent = 0;
 	numberOfBytesReceived = 0;
 	
+	hostName = @"http://fomalhaut.getloop.com";
 	hostPort = 5222;
 	keepAliveInterval = DEFAULT_KEEPALIVE_INTERVAL;
 	keepAliveData = [@" " dataUsingEncoding:NSUTF8StringEncoding];
