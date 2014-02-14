@@ -132,18 +132,14 @@ typedef void(^failureBlock)(NSError *error);
 	NSString *type = [iq type];
 	
 	if ([type isEqualToString:@"set"]) {
-		NSXMLElement *unique = [iq elementForName:@"unique" xmlns:XMLNS_UNIQUE_ROOM_NAMES];
-		
-		if (unique) {
+		if ([iq uniqueRoom]) {
 			// Everything is OK
 			return YES;
 		}
 	} else {
 		// This may be a response to a query we sent
-		NSXMLElement *unique = [iq elementForName:@"unique" xmlns:XMLNS_UNIQUE_ROOM_NAMES];
-		if (unique) {
-			NSXMLNode *id = [iq attributeForName:@"id"];
-			XMPPUniqueNameQueryInfo *queryInfo = [pendingQueries objectForKey:[id stringValue]];
+		if ([iq uniqueRoom]) {
+			XMPPUniqueNameQueryInfo *queryInfo = [pendingQueries objectForKey:[iq iqId]];
 			[self processQueryResponse:iq withInfo:queryInfo];
 		}
 		
@@ -233,20 +229,17 @@ typedef void(^failureBlock)(NSError *error);
 	// </iq>
 	
 	if ([[iq type] isEqualToString:@"result"]) {
-		NSXMLElement *name = [iq elementForName:@"unique" xmlns:XMLNS_UNIQUE_ROOM_NAMES];
-		if (name == nil)
-			return;
-		
-		NSXMLNode *id = [iq attributeForName:@"id"];
-		[self removeQueryInfo:queryInfo withKey:[id stringValue]];
-		if (self.successQuery) {
-			self.successQuery([name stringValue]);
-		} else {
-			[multicastDelegate xmppUniqueRoomNames:self didReceivedRoomName:[name stringValue]];
+		NSString *uniqueRoom = [iq uniqueRoom];
+		if (uniqueRoom != nil) {
+			[self removeQueryInfo:queryInfo withKey:[iq iqId]];
+			if (self.successQuery) {
+				self.successQuery(uniqueRoom);
+			} else {
+				[multicastDelegate xmppUniqueRoomNames:self didReceivedRoomName:uniqueRoom];
+			}
 		}
 	} else if ([[iq type] isEqualToString:@"error"]) {
-		NSXMLNode *id = [iq attributeForName:@"id"];
-		[self removeQueryInfo:queryInfo withKey:[id stringValue]];
+		[self removeQueryInfo:queryInfo withKey:[iq iqId]];
 		if (self.failureQuery) {
 			self.failureQuery(nil);
 		} else {

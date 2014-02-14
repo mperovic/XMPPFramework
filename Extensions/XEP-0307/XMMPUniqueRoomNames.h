@@ -8,8 +8,10 @@
 
 #import "XMPPModule.h"
 #import "XMPP.h"
+#import "XMPPIQ+XEP_0307.h"
 
-#define XMLNS_UNIQUE_ROOM_NAMES		@"http://jabber.org/protocol/muc#unique"
+// Defined in XMPPIQ+XEP_0307.h
+// #define XMLNS_UNIQUE_ROOM_NAMES		@"http://jabber.org/protocol/muc#unique"
 
 typedef enum XMPPRoomNameErrorCode {
 	XMPPRoomNameQueryTimeout,		// No response from server
