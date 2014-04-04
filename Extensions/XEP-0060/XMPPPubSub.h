@@ -307,6 +307,65 @@
 **/
 - (NSString *)configureNode:(NSString *)node withOptions:(NSDictionary *)options;
 
+
+- (NSString *)configureAffiliationsForNode:(NSString *)node;
+
+/**
+ * Configures affiliations for the given node.
+ *
+ * @param node
+ *
+ *     The name of the node to configure.
+ *     This should be the same node name you used when you created it.
+ *
+ * @param options
+ *
+ *     Options are passed as a dictionary of key:value(s) pairs.
+ *
+ * @return uuid
+ *
+ *     The return value is the unique elementID of the IQ stanza that was sent.
+ *
+ * The server's response to the request will be reported via the appropriate delegate methods.
+ *
+ * @see xmppPubSub:didConfigureAffiliationsForNode:withIQ:
+ * @see xmppPubSub:didNotAffiliationsForConfigureNode:withError:
+ **/
+- (NSString *)configureAffiliationsForNode:(NSString *)aNode withOptions:(NSDictionary *)options;
+
+/**
+ * Retrieves all affiliations.
+ *
+ * @return uuid
+ *
+ *     The return value is the unique elementID of the IQ stanza that was sent.
+ *
+ * The server's response to the request will be reported via the appropriate delegate methods.
+ *
+ * @see xmppPubSub:didReceiveAffiliationsForNode:withIQ:
+ * @see xmppPubSub:didNotReceiveAffiliationsForNode:withError:
+ **/
+- (NSString *)retrieveAffiliations;
+
+/**
+ * Retrieves affiliations for the given node.
+ *
+ * @param node
+ *
+ *     The name of the node to configure.
+ *     This should be the same node name you used when you created it.
+ *
+ * @return uuid
+ *
+ *     The return value is the unique elementID of the IQ stanza that was sent.
+ *
+ * The server's response to the request will be reported via the appropriate delegate methods.
+ *
+ * @see xmppPubSub:didReceiveAffiliationsForNode:withIQ:
+ * @see xmppPubSub:didNotReceiveAffiliationsForNode:withError:
+ **/
+- (NSString *)retrieveAffiliationsForNode:(NSString *)aNode;
+
 @end
 
 @protocol XMPPPubSubDelegate
@@ -340,5 +399,14 @@
 - (void)xmppPubSub:(XMPPPubSub *)sender didNotConfigureNode:(NSString *)node withError:(XMPPIQ *)iq;
 
 - (void)xmppPubSub:(XMPPPubSub *)sender didReceiveMessage:(XMPPMessage *)message;
+
+- (void)xmppPubSub:(XMPPPubSub *)sender didConfigureAffiliationsForNode:(NSString *)node withResult:(XMPPIQ *)iq;
+- (void)xmppPubSub:(XMPPPubSub *)sender didNotConfigureAffiliationsForNode:(NSString *)node withError:(XMPPIQ *)iq;
+
+- (void)xmppPubSub:(XMPPPubSub *)sender didRetrieveAffiliations:(XMPPIQ *)iq;
+- (void)xmppPubSub:(XMPPPubSub *)sender didNotRetrieveAffiliations:(XMPPIQ *)iq;
+
+- (void)xmppPubSub:(XMPPPubSub *)sender didRetrieveAffiliationsForNode:(NSString *)node withResult:(XMPPIQ *)iq;
+- (void)xmppPubSub:(XMPPPubSub *)sender didNotRetrieveAffiliationsForNode:(NSString *)node withError:(XMPPIQ *)iq;
 
 @end

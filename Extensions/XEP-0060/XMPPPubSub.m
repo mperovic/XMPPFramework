@@ -27,6 +27,8 @@
 	NSMutableDictionary *deleteDict;
 	NSMutableDictionary *configNodeDict;
 	NSMutableDictionary *publishDict;
+	NSMutableDictionary *configAffiliationsDict;
+	NSMutableDictionary *retrieveAffiliationseDict;
 }
 
 + (BOOL)isPubSubMessage:(XMPPMessage *)message
@@ -67,14 +69,16 @@
 	{
 		serviceJID = [aServiceJID copy];
 		
-		subscribeDict   = [[NSMutableDictionary alloc] init];
-		unsubscribeDict = [[NSMutableDictionary alloc] init];
-		retrieveDict    = [[NSMutableDictionary alloc] init];
-		configSubDict   = [[NSMutableDictionary alloc] init];
-		createDict      = [[NSMutableDictionary alloc] init];
-		deleteDict      = [[NSMutableDictionary alloc] init];
-		configNodeDict  = [[NSMutableDictionary alloc] init];
-		publishDict     = [[NSMutableDictionary alloc] init];
+		subscribeDict             = [[NSMutableDictionary alloc] init];
+		unsubscribeDict           = [[NSMutableDictionary alloc] init];
+		retrieveDict              = [[NSMutableDictionary alloc] init];
+		configSubDict             = [[NSMutableDictionary alloc] init];
+		createDict                = [[NSMutableDictionary alloc] init];
+		deleteDict                = [[NSMutableDictionary alloc] init];
+		configNodeDict            = [[NSMutableDictionary alloc] init];
+		publishDict               = [[NSMutableDictionary alloc] init];
+		configAffiliationsDict    = [[NSMutableDictionary alloc] init];
+		retrieveAffiliationseDict = [[NSMutableDictionary alloc] init];
 	}
 	return self;
 }
@@ -100,14 +104,16 @@
 
 - (void)deactivate
 {
-	[subscribeDict   removeAllObjects];
-	[unsubscribeDict removeAllObjects];
-	[retrieveDict    removeAllObjects];
-	[configSubDict   removeAllObjects];
-	[createDict      removeAllObjects];
-	[deleteDict      removeAllObjects];
-	[configNodeDict  removeAllObjects];
-	[publishDict     removeAllObjects];
+	[subscribeDict             removeAllObjects];
+	[unsubscribeDict           removeAllObjects];
+	[retrieveDict              removeAllObjects];
+	[configSubDict             removeAllObjects];
+	[createDict                removeAllObjects];
+	[deleteDict                removeAllObjects];
+	[configNodeDict            removeAllObjects];
+	[publishDict               removeAllObjects];
+	[configAffiliationsDict    removeAllObjects];
+	[retrieveAffiliationseDict removeAllObjects];
 	
 	if (serviceJID == nil) {
 		[[NSNotificationCenter defaultCenter] removeObserver:self name:XMPPStreamDidChangeMyJIDNotification object:nil];
@@ -391,7 +397,68 @@
 		[configNodeDict removeObjectForKey:elementID];
 		return YES;
 	}
-	
+	else if ((node = [configAffiliationsDict objectForKey:elementID]))
+	{
+		// Example configure node node success response:
+		//
+		// <iq type='result' from='pubsub.shakespeare.lit' id='ent2'/>
+		//
+		// Example configure node error response:
+		//
+		// <iq type='error' from='pubsub.shakespeare.lit' id='ent1'>
+		//   <error type='cancel'>
+		//     <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <unsupported xmlns='http://jabber.org/protocol/pubsub#errors' feature='modify-affiliations'/>
+		//   </error>
+		// </iq>
+		
+		if ([[iq type] isEqualToString:@"result"])
+			[multicastDelegate xmppPubSub:self didConfigureAffiliationsForNode:node withResult:iq];
+		else
+			[multicastDelegate xmppPubSub:self didNotConfigureAffiliationsForNode:node withError:iq];
+		
+		[configAffiliationsDict removeObjectForKey:elementID];
+		return YES;
+	}
+	else if ((node = [retrieveAffiliationseDict objectForKey:elementID]))
+	{
+		// Example retrieve affiliations node success response:
+		//
+		// <iq type='result' from='pubsub.shakespeare.lit' to='francisco@denmark.lit' id='affil2'>
+		//   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+		//     <affiliations>
+		//       <affiliation node='node6' affiliation='owner'/>
+		//     </affiliations>
+		//   </pubsub>
+		// </iq>
+		//
+		// Example configure node error response:
+		//
+		// <iq type='error' from='pubsub.shakespeare.lit' to='francisco@denmark.lit/barracks' id='affil1'>
+		//   <error type='cancel'>
+		//     <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//       <unsupported xmlns='http://jabber.org/protocol/pubsub#errors' feature='retrieve-affiliations'/>
+		//   </error>
+		// </iq>
+		
+		if ([[iq type] isEqualToString:@"result"]) {
+			if ([node isKindOfClass:[NSNull class]])
+				[multicastDelegate xmppPubSub:self didRetrieveAffiliations:iq];
+			else
+				[multicastDelegate xmppPubSub:self didRetrieveAffiliationsForNode:node withResult:iq];
+		}
+		else
+		{
+			if ([node isKindOfClass:[NSNull class]])
+				[multicastDelegate xmppPubSub:self didNotRetrieveAffiliations:iq];
+			else
+				[multicastDelegate xmppPubSub:self didNotRetrieveAffiliationsForNode:node withError:iq];
+		}
+		
+		[retrieveAffiliationseDict removeObjectForKey:elementID];
+		return YES;
+	}
+
 	return NO;
 }
 
@@ -481,12 +548,12 @@
 			NSArray *values = (NSArray *)obj;
 			for (id value in values)
 			{
-				[field addChild:[NSXMLElement elementWithName:@"value" objectValue:value]];
+				[field addChild:[NSXMLElement elementWithName:@"value" stringValue:[value description]]];
 			}
 		}
 		else
 		{
-			[field addChild:[NSXMLElement elementWithName:@"value" objectValue:obj]];
+			[field addChild:[NSXMLElement elementWithName:@"value" stringValue:[obj description]]];
 		}
 		
 		[x addChild:field];
@@ -964,6 +1031,118 @@
 	dispatch_async(moduleQueue, ^{
 		[publishDict setObject:node forKey:uuid];
 	});
+	return uuid;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma mark Affiliations methods
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+- (NSString *)configureAffiliationsForNode:(NSString *)node
+{
+	return [self configureAffiliationsForNode:node withOptions:nil];
+}
+
+- (NSString *)configureAffiliationsForNode:(NSString *)aNode withOptions:(NSDictionary *)options
+{
+	if (aNode == nil) return nil;
+	
+	// In-case aNode is mutable
+	NSString *node = [aNode copy];
+	
+	// Generate uuid and add to dict
+	NSString *uuid = [xmppStream generateUUID];
+	dispatch_async(moduleQueue, ^{
+		[configAffiliationsDict setObject:node forKey:uuid];
+	});
+
+	//	<iq type='set'
+	//      from='hamlet@denmark.lit/elsinore'
+	//      to='pubsub.shakespeare.lit'
+	//      id='ent2'>
+	//	  <pubsub xmlns='http://jabber.org/protocol/pubsub#owner'>
+	//      <affiliations node='princely_musings'>
+	//	      <affiliation jid='bard@shakespeare.lit' affiliation='publisher'/>
+	//      </affiliations>
+	//	  </pubsub>
+	//	</iq>
+	
+	NSXMLElement *affiliations  = [NSXMLElement elementWithName:@"affiliations"];
+	[affiliations addAttributeWithName:@"node" stringValue:node];
+	if (options)
+	{
+		NSArray *allKeys = [options allKeys];
+		for (NSString *jidStr in allKeys) {
+			id value = [options objectForKey:jidStr];
+			if ([value isKindOfClass:[NSString class]]) {
+				NSXMLElement *affiliation = [NSXMLElement elementWithName:@"affiliation"];
+				[affiliation addAttributeWithName:@"jid" stringValue:jidStr];
+				[affiliation addAttributeWithName:@"affiliation" stringValue:(NSString *)value];
+				[affiliations addChild:affiliation];
+			}
+		}
+	}
+	
+	NSXMLElement *pubsub = [NSXMLElement elementWithName:@"pubsub" xmlns:XMLNS_PUBSUB_OWNER];
+	[pubsub addChild:affiliations];
+	
+	XMPPIQ *iq = [XMPPIQ iqWithType:@"set" to:serviceJID elementID:uuid];
+	[iq addChild:pubsub];
+	
+	[xmppStream sendElement:iq];
+	return uuid;
+}
+
+- (NSString *)retrieveAffiliations {
+	return [self retrieveAffiliationsForNode:nil];
+}
+
+- (NSString *)retrieveAffiliationsForNode:(NSString *)aNode
+{
+	NSString *node = [aNode copy];
+	
+	// Generate uuid and add to dict
+	NSString *uuid = [xmppStream generateUUID];
+	dispatch_async(moduleQueue, ^{
+		if (node == nil) {
+			[retrieveAffiliationseDict setObject:[NSNull null] forKey:uuid];
+		} else {
+			[retrieveAffiliationseDict setObject:node forKey:uuid];
+		}
+	});
+	
+	//	<iq type='get'
+	//      from='francisco@denmark.lit/barracks'
+	//      to='pubsub.shakespeare.lit'
+	//      id='affil1'>
+	//	  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+	//      <affiliations/>
+	//	  </pubsub>
+	//	</iq>
+	//
+	// or
+	//
+	//	<iq type='get'
+	//      from='francisco@denmark.lit/barracks'
+	//      to='pubsub.shakespeare.lit'
+	//        id='affil2'>
+	//	  <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+	//      <affiliations node='node6'/>
+	//	  </pubsub>
+	//	</iq>
+	
+	NSXMLElement *affiliations  = [NSXMLElement elementWithName:@"affiliations"];
+	if (node) {
+		[affiliations addAttributeWithName:@"node" stringValue:node];
+	}
+	
+	NSXMLElement *pubsub = [NSXMLElement elementWithName:@"pubsub" xmlns:XMLNS_PUBSUB];
+	[pubsub addChild:affiliations];
+	
+	XMPPIQ *iq = [XMPPIQ iqWithType:@"get" to:serviceJID elementID:uuid];
+	[iq addChild:pubsub];
+	
+	[xmppStream sendElement:iq];
 	return uuid;
 }
 
