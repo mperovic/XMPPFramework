@@ -108,7 +108,8 @@ enum XMPPStreamConfig
 	NSString *hostName;
 	UInt16 hostPort;
     
-	BOOL autoStartTLS;
+    XMPPStreamStartTLSPolicy startTLSPolicy;
+    BOOL skipStartSession;
 	
 	id <XMPPSASLAuthentication> auth;
 	NSDate *authenticationDate;
@@ -383,27 +384,26 @@ enum XMPPStreamConfig
 		dispatch_async(xmppQueue, block);
 }
 
-
-- (BOOL)autoStartTLS
+- (XMPPStreamStartTLSPolicy)startTLSPolicy
 {
-    __block BOOL result;
-
+    __block XMPPStreamStartTLSPolicy result;
+    
     dispatch_block_t block = ^{
-        result = autoStartTLS;
+        result = startTLSPolicy;
     };
-
+    
     if (dispatch_get_specific(xmppQueueTag))
         block();
     else
         dispatch_sync(xmppQueue, block);
-
+    
     return result;
 }
 
-- (void)setAutoStartTLS:(BOOL)flag
+- (void)setStartTLSPolicy:(XMPPStreamStartTLSPolicy)flag
 {
 	dispatch_block_t block = ^{
-		autoStartTLS = flag;
+		startTLSPolicy = flag;
 	};
 	
 	if (dispatch_get_specific(xmppQueueTag))
@@ -668,6 +668,34 @@ enum XMPPStreamConfig
 		block();
 	else
 		dispatch_async(xmppQueue, block);
+}
+
+- (BOOL)skipStartSession
+{
+    __block BOOL result = NO;
+    
+    dispatch_block_t block = ^{
+        result = skipStartSession;
+    };
+    
+    if (dispatch_get_specific(xmppQueueTag))
+        block();
+    else
+        dispatch_sync(xmppQueue, block);
+    
+    return result;
+}
+
+- (void)setSkipStartSession:(BOOL)flag
+{
+    dispatch_block_t block = ^{
+        skipStartSession = flag;
+    };
+    
+    if (dispatch_get_specific(xmppQueueTag))
+        block();
+    else
+        dispatch_async(xmppQueue, block);
 }
 
 #if TARGET_OS_IPHONE
@@ -1889,8 +1917,13 @@ enum XMPPStreamConfig
 		// P.S. - This method is deprecated.
 		
 		id <XMPPSASLAuthentication> someAuth = nil;
-		
-		if ([self supportsDigestMD5Authentication])
+        
+		if ([self supportsSCRAMSHA1Authentication])
+		{
+			someAuth = [[XMPPSCRAMSHA1Authentication alloc] initWithStream:self password:password];
+			result = [self authenticate:someAuth error:&err];
+		}
+		else if ([self supportsDigestMD5Authentication])
 		{
 			someAuth = [[XMPPDigestMD5Authentication alloc] initWithStream:self password:password];
 			result = [self authenticate:someAuth error:&err];
@@ -3241,7 +3274,7 @@ enum XMPPStreamConfig
 	
 	if (f_starttls)
 	{
-		if ([f_starttls elementForName:@"required"] || [self autoStartTLS])
+		if ([f_starttls elementForName:@"required"] || [self startTLSPolicy] >= XMPPStreamStartTLSPolicyPreferred)
 		{
 			// TLS is required for this connection
 			
@@ -3259,6 +3292,14 @@ enum XMPPStreamConfig
 			return;
 		}
 	}
+    else if(![self isSecure] && [self startTLSPolicy] == XMPPStreamStartTLSPolicyRequired)
+    {
+        // We can close our TCP connection now as the server doesn't support TLS.
+		[self disconnect];
+		
+		// The socketDidDisconnect:withError: method will handle everything else
+		return;
+    }
 	
 	// Check to see if resource binding is required
 	// Don't forget about that NSXMLElement bug you reported to apple (xmlns is required or element won't be found)
@@ -3489,7 +3530,7 @@ enum XMPPStreamConfig
 		// Don't forget about that NSXMLElement bug you reported to apple (xmlns is required or element won't be found)
 		NSXMLElement *f_session = [features elementForName:@"session" xmlns:@"urn:ietf:params:xml:ns:xmpp-session"];
 		
-		if (f_session)
+		if (f_session && (![self skipStartSession]))
 		{
 			NSXMLElement *session = [NSXMLElement elementWithName:@"session"];
 			[session setXmlns:@"urn:ietf:params:xml:ns:xmpp-session"];
