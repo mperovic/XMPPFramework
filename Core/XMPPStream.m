@@ -110,6 +110,7 @@ enum XMPPStreamConfig
     
     XMPPStreamStartTLSPolicy startTLSPolicy;
     BOOL skipStartSession;
+    BOOL validatesResponses;
 	
 	id <XMPPSASLAuthentication> auth;
 	NSDate *authenticationDate;
@@ -690,6 +691,34 @@ enum XMPPStreamConfig
 {
     dispatch_block_t block = ^{
         skipStartSession = flag;
+    };
+    
+    if (dispatch_get_specific(xmppQueueTag))
+        block();
+    else
+        dispatch_async(xmppQueue, block);
+}
+
+- (BOOL)validatesResponses
+{
+    __block BOOL result = NO;
+    
+    dispatch_block_t block = ^{
+        result = validatesResponses;
+    };
+    
+    if (dispatch_get_specific(xmppQueueTag))
+        block();
+    else
+        dispatch_sync(xmppQueue, block);
+    
+    return result;
+}
+
+- (void)setValidatesResponses:(BOOL)flag
+{
+    dispatch_block_t block = ^{
+        validatesResponses = flag;
     };
     
     if (dispatch_get_specific(xmppQueueTag))
@@ -3851,6 +3880,43 @@ enum XMPPStreamConfig
 	}
 }
 
+- (void)socket:(GCDAsyncSocket *)sock didReceiveTrust:(SecTrustRef)trust
+                                    completionHandler:(void (^)(BOOL shouldTrustPeer))completionHandler
+{
+	XMPPLogTrace();
+	
+	SEL selector = @selector(xmppStream:didReceiveTrust:completionHandler:);
+	
+	if ([multicastDelegate hasDelegateThatRespondsToSelector:selector])
+	{
+		[multicastDelegate xmppStream:self didReceiveTrust:trust completionHandler:completionHandler];
+	}
+	else
+	{
+		XMPPLogWarn(@"%@: Stream secured with (GCDAsyncSocketManuallyEvaluateTrust == YES),"
+		            @" but there are no delegates that implement xmppStream:didReceiveTrust:completionHandler:."
+		            @" This is likely a mistake.", THIS_FILE);
+		
+		// The delegate method should likely have code similar to this,
+		// but will presumably perform some extra security code stuff.
+		// For example, allowing a specific self-signed certificate that is known to the app.
+		
+		dispatch_queue_t bgQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
+		dispatch_async(bgQueue, ^{
+			
+			SecTrustResultType result = kSecTrustResultDeny;
+			OSStatus status = SecTrustEvaluate(trust, &result);
+			
+			if (status == noErr && (result == kSecTrustResultProceed || result == kSecTrustResultUnspecified)) {
+				completionHandler(YES);
+			}
+			else {
+				completionHandler(NO);
+			}
+		});
+	}
+}
+
 - (void)socketDidSecure:(GCDAsyncSocket *)sock
 {
 	// This method is invoked on the xmppQueue.
@@ -4144,7 +4210,7 @@ enum XMPPStreamConfig
 	{
         XMPPIQ *iq = [XMPPIQ iqFromElement:element];
         
-        if([idTracker invokeForElement:iq withObject:element])
+        if(![self validatesResponses] || ([self validatesResponses] && [idTracker invokeForElement:iq withObject:element]))
         {
             // The response from our binding request
             [self handleBinding:element];
@@ -4154,7 +4220,7 @@ enum XMPPStreamConfig
 	{
         XMPPIQ *iq = [XMPPIQ iqFromElement:element];
         
-        if([idTracker invokeForElement:iq withObject:element])
+        if(![self validatesResponses] || ([self validatesResponses] && [idTracker invokeForElement:iq withObject:element]))
         {
             // The response from our start session request
             [self handleStartSessionResponse:element];
