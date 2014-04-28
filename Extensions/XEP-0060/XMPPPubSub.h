@@ -366,6 +366,49 @@
  **/
 - (NSString *)retrieveAffiliationsForNode:(NSString *)aNode;
 
+/**
+ * Delete an Item from a Node.
+ *
+ * @param item
+ *
+ *     The item ID to remove.
+ *     This must be the same item ID which is created earlier.
+ *
+ * @param node
+ *
+ *     The name of the node.
+ *     This should be the same node name you used when you created it.
+ *
+ * @return uuid
+ *
+ *     The return value is the unique elementID of the IQ stanza that was sent.
+ *
+ * The server's response to the request will be reported via the appropriate delegate methods.
+ *
+ * @see xmppPubSub:didRemoveItemFromNode:withIQ:
+ * @see xmppPubSub:didNotRemoveItemFromNode:withError:
+ **/
+- (NSString *)deleteItem:(NSString *)item fromNode:(NSString *)aNode;
+
+/**
+ * Retrieve Items for a Node.
+ *
+ * @param node
+ *
+ *     The name of the node.
+ *     This should be the same node name you used when you created it.
+ *
+ * @return uuid
+ *
+ *     The return value is the unique elementID of the IQ stanza that was sent.
+ *
+ * The server's response to the request will be reported via the appropriate delegate methods.
+ *
+ * @see xmppPubSub:didRetrieveItemsForNode:withIQ:
+ * @see xmppPubSub:didNotRetrieveItemsForNode:withError:
+ **/
+- (NSString *)retrieveItemsForNode:(NSString *)aNode;
+
 @end
 
 @protocol XMPPPubSubDelegate
@@ -408,5 +451,11 @@
 
 - (void)xmppPubSub:(XMPPPubSub *)sender didRetrieveAffiliationsForNode:(NSString *)node withResult:(XMPPIQ *)iq;
 - (void)xmppPubSub:(XMPPPubSub *)sender didNotRetrieveAffiliationsForNode:(NSString *)node withError:(XMPPIQ *)iq;
+
+- (void)xmppPubSub:(XMPPPubSub *)sender didRemoveItemFromNode:(NSString *)node withResult:(XMPPIQ *)iq;
+- (void)xmppPubSub:(XMPPPubSub *)sender didNotRemoveItemFromNode:(NSString *)node withError:(XMPPIQ *)iq;
+
+- (void)xmppPubSub:(XMPPPubSub *)sender didRetrieveItemsForNode:(NSString *)node withResult:(XMPPIQ *)iq;
+- (void)xmppPubSub:(XMPPPubSub *)sender didNotRetrieveItemsForNode:(NSString *)node withError:(XMPPIQ *)iq;
 
 @end

@@ -29,6 +29,8 @@
 	NSMutableDictionary *publishDict;
 	NSMutableDictionary *configAffiliationsDict;
 	NSMutableDictionary *retrieveAffiliationseDict;
+	NSMutableDictionary *deleteItemFromNodeDict;
+	NSMutableDictionary *retrieveItemsForNodeDict;
 }
 
 + (BOOL)isPubSubMessage:(XMPPMessage *)message
@@ -79,6 +81,8 @@
 		publishDict               = [[NSMutableDictionary alloc] init];
 		configAffiliationsDict    = [[NSMutableDictionary alloc] init];
 		retrieveAffiliationseDict = [[NSMutableDictionary alloc] init];
+		deleteItemFromNodeDict    = [[NSMutableDictionary alloc] init];
+		retrieveItemsForNodeDict  = [[NSMutableDictionary alloc] init];
 	}
 	return self;
 }
@@ -114,6 +118,8 @@
 	[publishDict               removeAllObjects];
 	[configAffiliationsDict    removeAllObjects];
 	[retrieveAffiliationseDict removeAllObjects];
+	[deleteItemFromNodeDict    removeAllObjects];
+	[retrieveItemsForNodeDict  removeAllObjects];
 	
 	if (serviceJID == nil) {
 		[[NSNotificationCenter defaultCenter] removeObserver:self name:XMPPStreamDidChangeMyJIDNotification object:nil];
@@ -456,6 +462,138 @@
 		}
 		
 		[retrieveAffiliationseDict removeObjectForKey:elementID];
+		return YES;
+	}
+	else if ((node = [deleteItemFromNodeDict objectForKey:elementID]))
+	{
+		// Example delete an item from node success response:
+		//
+		// <iq type='result'
+		//     from='pubsub.shakespeare.lit'
+		//     to='hamlet@denmark.lit/elsinore'
+		// id='retract1'/>
+		//
+		// Examples configure node error response:
+		//
+		// 7.2.3.1 Insufficient Privileges
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='hamlet@denmark.lit/elsinore'
+		//     id='retract1'>
+		//   <error type='auth'>
+		//     <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//   </error>
+		// </iq>
+		//
+		// 7.2.3.2 Node Does Not Exist
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='hamlet@denmark.lit/elsinore'
+		//     id='retract1'>
+		//   <error type='cancel'>
+		//     <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//   </error>
+		// </iq>
+		//
+		// 7.2.3.3 NodeID Required
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='hamlet@denmark.lit/elsinore'
+		//     id='retract1'>
+		//   <error type='modify'>
+		//     <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <nodeid-required xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 7.2.3.4 Item or ItemID Required
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='hamlet@denmark.lit/elsinore'
+		//     id='retract1'>
+		//   <error type='modify'>
+		//     <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <item-required xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 7.2.3.5 Persistent Items Not Supported
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='hamlet@denmark.lit/elsinore'
+		//     id='retract1'>
+		//   <error type='cancel'>
+		//     <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <unsupported xmlns='http://jabber.org/protocol/pubsub#errors' feature='persistent-items'/>
+		//   </error>
+		// </iq>
+		//
+		// 7.2.3.6 Item Deletion Not Supported
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='hamlet@denmark.lit/elsinore'
+		//     id='retract1'>
+		//   <error type='cancel'>
+		//     <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <unsupported xmlns='http://jabber.org/protocol/pubsub#errors' feature='delete-items'/>
+		//   </error>
+		// </iq>
+		
+		if ([[iq type] isEqualToString:@"result"]) {
+			[multicastDelegate xmppPubSub:self didRemoveItemFromNode:node withResult:iq];
+		}
+		else
+		{
+			[multicastDelegate xmppPubSub:self didNotRemoveItemFromNode:node withError:iq];
+		}
+		
+		[deleteItemFromNodeDict removeObjectForKey:elementID];
+		return YES;
+	}
+	else if ((node = [retrieveItemsForNodeDict objectForKey:elementID]))
+	{
+		// Example delete an item from node success response:
+		//
+		// <iq type='result'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+		//     <items node='princely_musings'>
+		//       <item id='368866411b877c30064a5f62b917cffe'>
+        //         <entry xmlns='http://www.w3.org/2005/Atom'>
+		//           <title>The Uses of This World</title>
+		//           <summary> O, that this too too solid flesh would melt Thaw and resolve itself into a dew!</summary>
+		//           <link rel='alternate' type='text/html' href='http://denmark.lit/2003/12/13/atom03'/>
+		//           <id>tag:denmark.lit,2003:entry-32396</id>
+		//           <published>2003-12-12T17:47:23Z</published>
+		//           <updated>2003-12-12T17:47:23Z</updated>
+		//         </entry>
+		//       </item>
+		//       <item id='3300659945416e274474e469a1f0154c'>
+        //         <entry xmlns='http://www.w3.org/2005/Atom'>
+		//           <title>Ghostly Encounters</title>
+		//           <summary> O all you host of heaven! O earth! what else? And shall I couple hell? O, fie! Hold, hold, my heart; And you, my sinews, grow not instant old, But bear me stiffly up. Remember thee!</summary>
+		//           <link rel='alternate' type='text/html' href='http://denmark.lit/2003/12/13/atom03'/>
+		//           <id>tag:denmark.lit,2003:entry-32396</id>
+		//           <published>2003-12-12T23:21:34Z</published>
+		//           <updated>2003-12-12T23:21:34Z</updated>
+        //         </entry>
+		//       </item>
+		//       ...
+		//     </items>
+		//   </pubsub>
+		// </iq>
+		
+		if ([[iq type] isEqualToString:@"result"]) {
+			[multicastDelegate xmppPubSub:self didRetrieveItemsForNode:node withResult:iq];
+		}
+		else
+		{
+			[multicastDelegate xmppPubSub:self didNotRetrieveItemsForNode:node withError:iq];
+		}
+		
+		[retrieveItemsForNodeDict removeObjectForKey:elementID];
 		return YES;
 	}
 
@@ -947,6 +1085,88 @@
 	XMPPIQ *iq = [XMPPIQ iqWithType:@"set" to:serviceJID elementID:uuid];
 	[iq addChild:pubsub];
 
+	[xmppStream sendElement:iq];
+	return uuid;
+}
+
+- (NSString *)deleteItem:(NSString *)item fromNode:(NSString *)aNode {
+	NSString *node = [aNode copy];
+	
+	if (!item || [item isEqualToString:@""])
+	{
+		return nil;
+	}
+	
+	if (!node || [node isEqualToString:@""])
+	{
+		return nil;
+	}
+	
+	// Generate uuid and add to dict
+	NSString *uuid = [xmppStream generateUUID];
+	dispatch_async(moduleQueue, ^{
+		[deleteItemFromNodeDict setObject:node forKey:uuid];
+	});
+	
+	// <iq type='set'
+    //     from='hamlet@denmark.lit/elsinore'
+    //     to='pubsub.shakespeare.lit'
+    //     id='retract1'>
+	//   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+    //     <retract node='princely_musings'>
+	//       <item id='ae890ac52d0df67ed7cfdf51b644e901'/>
+    //     </retract>
+	//   </pubsub>
+	// </iq>
+	
+	NSXMLElement *retract  = [NSXMLElement elementWithName:@"retract"];
+	[retract addAttributeWithName:@"node" stringValue:node];
+	NSXMLElement *itemElement = [NSXMLElement elementWithName:@"item"];
+	[itemElement addAttributeWithName:@"id" stringValue:item];
+	[retract addChild:itemElement];
+	
+	NSXMLElement *pubsub = [NSXMLElement elementWithName:@"pubsub" xmlns:XMLNS_PUBSUB];
+	[pubsub addChild:retract];
+	
+	XMPPIQ *iq = [XMPPIQ iqWithType:@"set" to:serviceJID elementID:uuid];
+	[iq addChild:pubsub];
+	
+	[xmppStream sendElement:iq];
+	return uuid;
+}
+
+- (NSString *)retrieveItemsForNode:(NSString *)aNode {
+	NSString *node = [aNode copy];
+		
+	if (!node || [node isEqualToString:@""])
+	{
+		return nil;
+	}
+	
+	// Generate uuid and add to dict
+	NSString *uuid = [xmppStream generateUUID];
+	dispatch_async(moduleQueue, ^{
+		[retrieveItemsForNodeDict setObject:node forKey:uuid];
+	});
+	
+	// <iq type='get'
+    //     from='francisco@denmark.lit/barracks'
+    //     to='pubsub.shakespeare.lit'
+    //     id='items1'>
+	//   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+	//     <items node='princely_musings'/>
+	//   </pubsub>
+	// </iq>
+	
+	NSXMLElement *items  = [NSXMLElement elementWithName:@"items"];
+	[items addAttributeWithName:@"node" stringValue:node];
+	
+	NSXMLElement *pubsub = [NSXMLElement elementWithName:@"pubsub" xmlns:XMLNS_PUBSUB];
+	[pubsub addChild:items];
+	
+	XMPPIQ *iq = [XMPPIQ iqWithType:@"get" to:serviceJID elementID:uuid];
+	[iq addChild:pubsub];
+	
 	[xmppStream sendElement:iq];
 	return uuid;
 }
