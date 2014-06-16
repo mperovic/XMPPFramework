@@ -552,7 +552,7 @@
 	}
 	else if ((node = [retrieveItemsForNodeDict objectForKey:elementID]))
 	{
-		// Example delete an item from node success response:
+		// Example retrieve items from a node success response:
 		//
 		// <iq type='result'
 		//     from='pubsub.shakespeare.lit'
@@ -561,7 +561,7 @@
 		//   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
 		//     <items node='princely_musings'>
 		//       <item id='368866411b877c30064a5f62b917cffe'>
-        //         <entry xmlns='http://www.w3.org/2005/Atom'>
+		//         <entry xmlns='http://www.w3.org/2005/Atom'>
 		//           <title>The Uses of This World</title>
 		//           <summary> O, that this too too solid flesh would melt Thaw and resolve itself into a dew!</summary>
 		//           <link rel='alternate' type='text/html' href='http://denmark.lit/2003/12/13/atom03'/>
@@ -571,18 +571,148 @@
 		//         </entry>
 		//       </item>
 		//       <item id='3300659945416e274474e469a1f0154c'>
-        //         <entry xmlns='http://www.w3.org/2005/Atom'>
+		//         <entry xmlns='http://www.w3.org/2005/Atom'>
 		//           <title>Ghostly Encounters</title>
 		//           <summary> O all you host of heaven! O earth! what else? And shall I couple hell? O, fie! Hold, hold, my heart; And you, my sinews, grow not instant old, But bear me stiffly up. Remember thee!</summary>
 		//           <link rel='alternate' type='text/html' href='http://denmark.lit/2003/12/13/atom03'/>
 		//           <id>tag:denmark.lit,2003:entry-32396</id>
 		//           <published>2003-12-12T23:21:34Z</published>
 		//           <updated>2003-12-12T23:21:34Z</updated>
-        //         </entry>
+		//         </entry>
 		//       </item>
 		//       ...
 		//     </items>
 		//   </pubsub>
+		// </iq>
+		//
+		// 6.5.9.12 No Such Item(s)
+		// <iq from='pubsub.shakespeare.lit'
+		//     id='items1'
+		//     to='francisco@denmark.lit/barracks'
+		//     type='result'>
+		//   <pubsub xmlns='http://jabber.org/protocol/pubsub'>
+		//     <items node='princely_musings'/>
+		//   </pubsub>
+		// </iq>
+		//
+		// Examples delete node error response:
+		//
+		// 6.5.9.1 Subscription ID Required
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='modify'>
+		//     <bad-request xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <subid-required xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.2 Invalid Subscription ID
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='modify'>
+		//     <not-acceptable xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <invalid-subid xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.3 Entity Not Subscribed
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='auth'>
+		//     <not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <not-subscribed xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.4 Persistent Items Not Supported
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='cancel'>
+		//     <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <unsupported xmlns='http://jabber.org/protocol/pubsub#errors' feature='persistent-items'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.5 Item Retrieval Not Supported
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='cancel'>
+		//      <feature-not-implemented xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//      <unsupported xmlns='http://jabber.org/protocol/pubsub#errors' feature='retrieve-items'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.6 Presence Subscription Required
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='auth'>
+		//     <not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <presence-subscription-required xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.7 Not in Roster Group
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='auth'>
+		//     <not-authorized xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <not-in-roster-group xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.8 Not on Whitelist
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='cancel'>
+		//     <not-allowed xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//     <closed-node xmlns='http://jabber.org/protocol/pubsub#errors'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.9 Payment Required
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='auth'>
+		//     <payment-required xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.10 Blocked
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='auth'>
+		//     <forbidden xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//   </error>
+		// </iq>
+		//
+		// 6.5.9.11 Node Does Not Exist
+		// <iq type='error'
+		//     from='pubsub.shakespeare.lit'
+		//     to='francisco@denmark.lit/barracks'
+		//     id='items1'>
+		//   <error type='cancel'>
+		//     <item-not-found xmlns='urn:ietf:params:xml:ns:xmpp-stanzas'/>
+		//   </error>
 		// </iq>
 		
 		if ([[iq type] isEqualToString:@"result"]) {
