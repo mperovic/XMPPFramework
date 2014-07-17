@@ -41,8 +41,9 @@
 #define TAG_XMPP_READ_START         100
 #define TAG_XMPP_READ_STREAM        101
 #define TAG_XMPP_WRITE_START        200
-#define TAG_XMPP_WRITE_STREAM       201
-#define TAG_XMPP_WRITE_RECEIPT      202
+#define TAG_XMPP_WRITE_STOP         201
+#define TAG_XMPP_WRITE_STREAM       202
+#define TAG_XMPP_WRITE_RECEIPT      203
 
 // Define the timeouts (in seconds) for SRV
 #define TIMEOUT_SRV_RESOLUTION 30.0
@@ -96,8 +97,8 @@ enum XMPPStreamConfig
 	
 	GCDAsyncSocket *asyncSocket;
 	
-	UInt64 numberOfBytesSent;
-	UInt64 numberOfBytesReceived;
+	uint64_t numberOfBytesSent;
+	uint64_t numberOfBytesReceived;
 	
 	XMPPParser *parser;
 	NSError *parserError;
@@ -137,29 +138,10 @@ enum XMPPStreamConfig
     XMPPIDTracker *idTracker;
 	
 	NSMutableArray *receipts;
+	NSCountedSet *customElementNames;
 	
 	id userTag;
 }
-
-- (void)setIsSecure:(BOOL)flag;
-- (void)setIsAuthenticated:(BOOL)flag;
-- (void)continueSendIQ:(XMPPIQ *)iq withTag:(long)tag;
-- (void)continueSendMessage:(XMPPMessage *)message withTag:(long)tag;
-- (void)continueSendPresence:(XMPPPresence *)presence withTag:(long)tag;
-- (void)startNegotiation;
-- (void)sendOpeningNegotiation;
-- (void)continueStartTLS:(NSMutableDictionary *)settings;
-- (void)continueHandleBinding:(NSString *)alternativeResource;
-- (void)setupKeepAliveTimer;
-- (void)keepAlive;
-
-- (void)startConnectTimeout:(NSTimeInterval)timeout;
-- (void)endConnectTimeout;
-- (void)doConnectTimeout;
-
-- (void)continueReceiveMessage:(XMPPMessage *)message;
-- (void)continueReceiveIQ:(XMPPIQ *)iq;
-- (void)continueReceivePresence:(XMPPPresence *)presence;
 
 @end
 
@@ -596,6 +578,10 @@ enum XMPPStreamConfig
 		{
 			keepAliveData = [[NSString stringWithFormat:@"%c", keepAliveChar] dataUsingEncoding:NSUTF8StringEncoding];
 		}
+		else
+		{
+			XMPPLogWarn(@"Invalid whitespace character! Must be: space, newline, or tab");
+		}
 	};
 	
 	if (dispatch_get_specific(xmppQueueTag))
@@ -604,40 +590,55 @@ enum XMPPStreamConfig
 		dispatch_async(xmppQueue, block);
 }
 
-- (UInt64)numberOfBytesSent
+- (uint64_t)numberOfBytesSent
 {
+	__block uint64_t result = 0;
+	
+	dispatch_block_t block = ^{
+		result = numberOfBytesSent;
+	};
+	
 	if (dispatch_get_specific(xmppQueueTag))
-	{
-		return numberOfBytesSent;
-	}
+		block();
 	else
-	{
-		__block UInt64 result;
-		
-		dispatch_sync(xmppQueue, ^{
-			result = numberOfBytesSent;
-		});
-		
-		return result;
-	}
+		dispatch_sync(xmppQueue, block);
+	
+	return result;
 }
 
-- (UInt64)numberOfBytesReceived
+- (uint64_t)numberOfBytesReceived
 {
+	__block uint64_t result = 0;
+	
+	dispatch_block_t block = ^{
+		result = numberOfBytesReceived;
+	};
+	
 	if (dispatch_get_specific(xmppQueueTag))
-	{
-		return numberOfBytesReceived;
-	}
+		block();
 	else
-	{
-		__block UInt64 result;
-		
-		dispatch_sync(xmppQueue, ^{
-			result = numberOfBytesReceived;
-		});
-		
-		return result;
-	}
+		dispatch_sync(xmppQueue, block);
+	
+	return result;
+}
+
+- (void)getNumberOfBytesSent:(uint64_t *)bytesSentPtr numberOfBytesReceived:(uint64_t *)bytesReceivedPtr
+{
+	__block uint64_t bytesSent = 0;
+	__block uint64_t bytesReceived = 0;
+	
+	dispatch_block_t block = ^{
+		bytesSent = numberOfBytesSent;
+		bytesReceived = numberOfBytesReceived;
+	};
+	
+	if (dispatch_get_specific(xmppQueueTag))
+		block();
+	else
+		dispatch_sync(xmppQueue, block);
+	
+	if (bytesSentPtr) *bytesSentPtr = bytesSent;
+	if (bytesReceivedPtr) *bytesReceivedPtr = bytesReceived;
 }
 
 - (BOOL)resetByteCountPerConnection
@@ -955,7 +956,6 @@ enum XMPPStreamConfig
 /**
  * Start Connect Timeout
 **/
-
 - (void)startConnectTimeout:(NSTimeInterval)timeout
 {
     XMPPLogTrace();
@@ -987,7 +987,6 @@ enum XMPPStreamConfig
 /**
  * End Connect Timeout
 **/
-
 - (void)endConnectTimeout
 {
 	XMPPLogTrace();
@@ -1002,7 +1001,6 @@ enum XMPPStreamConfig
 /**
  * Connect has timed out, so inform the delegates and close the connection
 **/
-
 - (void)doConnectTimeout
 {
 	XMPPLogTrace();
@@ -1445,7 +1443,7 @@ enum XMPPStreamConfig
 				XMPPLogSend(@"SEND: %@", termStr);
 				numberOfBytesSent += [termData length];
 				
-				[asyncSocket writeData:termData withTimeout:TIMEOUT_XMPP_WRITE tag:TAG_XMPP_WRITE_STREAM];
+				[asyncSocket writeData:termData withTimeout:TIMEOUT_XMPP_WRITE tag:TAG_XMPP_WRITE_STOP];
 				[asyncSocket disconnectAfterWriting];
 				
 				// Everthing will be handled in socketDidDisconnect:withError:
@@ -2107,9 +2105,7 @@ enum XMPPStreamConfig
  * if the given compression method is supported.
  *
  * If we are not connected to a server, this method simply returns NO.
- **/
-
-
+**/
 - (BOOL)supportsCompressionMethod:(NSString *)compressionMethod
 {
 	__block BOOL result = NO;
@@ -2261,6 +2257,8 @@ enum XMPPStreamConfig
 					
 					if (state == STATE_XMPP_CONNECTED) {
 						[self continueSendIQ:modifiedIQ withTag:tag];
+					} else {
+						[self failToSendIQ:modifiedIQ];
 					}
 				}});
 			}
@@ -2332,6 +2330,9 @@ enum XMPPStreamConfig
 					if (state == STATE_XMPP_CONNECTED) {
 						[self continueSendMessage:modifiedMessage withTag:tag];
 					}
+					else {
+						[self failToSendMessage:modifiedMessage];
+					}
 				}});
 			}
 		}});
@@ -2400,7 +2401,9 @@ enum XMPPStreamConfig
 				dispatch_async(xmppQueue, ^{ @autoreleasepool {
 					
 					if (state == STATE_XMPP_CONNECTED) {
-						[self continueSendPresence:presence withTag:tag];
+						[self continueSendPresence:modifiedPresence withTag:tag];
+					} else {
+						[self failToSendPresence:modifiedPresence];
 					}
 				}});
 			}
@@ -2491,6 +2494,11 @@ enum XMPPStreamConfig
 	[asyncSocket writeData:outgoingData
 	           withTimeout:TIMEOUT_XMPP_WRITE
 	                   tag:tag];
+	
+	if ([customElementNames countForObject:[element name]])
+	{
+		[multicastDelegate xmppStream:self didSendCustomElement:element];
+	}
 }
 
 /**
@@ -2553,11 +2561,7 @@ enum XMPPStreamConfig
 		}
 		else
 		{
-			NSError *error = [NSError errorWithDomain:XMPPStreamErrorDomain
-												 code:XMPPStreamInvalidState
-											 userInfo:nil];
-            
-			[self failToSendElement:element error:error];
+			[self failToSendElement:element];
 		}
 	}};
 	
@@ -2597,11 +2601,7 @@ enum XMPPStreamConfig
 			}
             else
             {
-                NSError *error = [NSError errorWithDomain:XMPPStreamErrorDomain
-                                                     code:XMPPStreamInvalidState
-                                                 userInfo:nil];
-                
-                [self failToSendElement:element error:error];
+                [self failToSendElement:element];
             }
 		}};
 		
@@ -2614,21 +2614,21 @@ enum XMPPStreamConfig
 	}
 }
 
-- (void)failToSendElement:(NSXMLElement *)element error:(NSError *)error
+- (void)failToSendElement:(NSXMLElement *)element
 {
 	NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
 	
 	if ([element isKindOfClass:[XMPPIQ class]])
 	{
-		[self failToSendIQ:(XMPPIQ *)element error:error];
+		[self failToSendIQ:(XMPPIQ *)element];
 	}
 	else if ([element isKindOfClass:[XMPPMessage class]])
 	{
-		[self failToSendMessage:(XMPPMessage *)element error:error];
+		[self failToSendMessage:(XMPPMessage *)element];
 	}
 	else if ([element isKindOfClass:[XMPPPresence class]])
 	{
-		[self failToSendPresence:(XMPPPresence *)element error:error];
+		[self failToSendPresence:(XMPPPresence *)element];
 	}
 	else
 	{
@@ -2636,36 +2636,48 @@ enum XMPPStreamConfig
 		
 		if ([elementName isEqualToString:@"iq"])
 		{
-			[self failToSendIQ:[XMPPIQ iqFromElement:element] error:error];
+			[self failToSendIQ:[XMPPIQ iqFromElement:element]];
 		}
 		else if ([elementName isEqualToString:@"message"])
 		{
-			[self failToSendMessage:[XMPPMessage messageFromElement:element] error:error];
+			[self failToSendMessage:[XMPPMessage messageFromElement:element]];
 		}
 		else if ([elementName isEqualToString:@"presence"])
 		{
-			[self failToSendPresence:[XMPPPresence presenceFromElement:element] error:error];
+			[self failToSendPresence:[XMPPPresence presenceFromElement:element]];
 		}
 	}
 }
 
-- (void)failToSendIQ:(XMPPIQ *)iq error:(NSError *)error
+- (void)failToSendIQ:(XMPPIQ *)iq
 {
 	NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
+	
+	NSError *error = [NSError errorWithDomain:XMPPStreamErrorDomain
+	                                     code:XMPPStreamInvalidState
+	                                 userInfo:nil];
 	
 	[multicastDelegate xmppStream:self didFailToSendIQ:iq error:error];
 }
 
-- (void)failToSendMessage:(XMPPMessage *)message error:(NSError *)error
+- (void)failToSendMessage:(XMPPMessage *)message
 {
 	NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
+	
+	NSError *error = [NSError errorWithDomain:XMPPStreamErrorDomain
+	                                     code:XMPPStreamInvalidState
+	                                 userInfo:nil];
 	
 	[multicastDelegate xmppStream:self didFailToSendMessage:message error:error];
 }
 
-- (void)failToSendPresence:(XMPPPresence *)presence error:(NSError *)error
+- (void)failToSendPresence:(XMPPPresence *)presence
 {
 	NSAssert(dispatch_get_specific(xmppQueueTag), @"Invoked on incorrect queue");
+	
+	NSError *error = [NSError errorWithDomain:XMPPStreamErrorDomain
+	                                     code:XMPPStreamInvalidState
+	                                 userInfo:nil];
 	
 	[multicastDelegate xmppStream:self didFailToSendPresence:presence error:error];
 }
@@ -3041,6 +3053,10 @@ enum XMPPStreamConfig
 			{
 				[self receivePresence:[XMPPPresence presenceFromElement:element]];
 			}
+			else if ([customElementNames countForObject:elementName])
+			{
+				[multicastDelegate xmppStream:self didReceiveCustomElement:element];
+			}
 			else
 			{
 				[multicastDelegate xmppStream:self didReceiveError:element];
@@ -3052,6 +3068,41 @@ enum XMPPStreamConfig
 		block();
 	else
 		dispatch_async(xmppQueue, block);
+}
+
+- (void)registerCustomElementNames:(NSSet *)names
+{
+	dispatch_block_t block = ^{
+		
+		if (customElementNames == nil)
+			customElementNames = [[NSCountedSet alloc] init];
+		
+		for (NSString *name in names)
+		{
+			[customElementNames addObject:name];
+		}
+	};
+	
+	if (dispatch_get_specific(xmppQueueTag))
+		block();
+	else
+		dispatch_sync(xmppQueue, block);
+}
+
+- (void)unregisterCustomElementNames:(NSSet *)names
+{
+	dispatch_block_t block = ^{
+		
+		for (NSString *name in names)
+		{
+			[customElementNames removeObject:name];
+		}
+	};
+	
+	if (dispatch_get_specific(xmppQueueTag))
+		block();
+	else
+		dispatch_sync(xmppQueue, block);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -3985,6 +4036,10 @@ enum XMPPStreamConfig
 		[receipt signalSuccess];
 		[receipts removeObjectAtIndex:0];
 	}
+	else if (tag == TAG_XMPP_WRITE_STOP)
+	{
+		[multicastDelegate xmppStreamDidSendClosingStreamStanza:self];
+	}
 }
 
 /**
@@ -4241,9 +4296,13 @@ enum XMPPStreamConfig
 			[self receivePresence:[XMPPPresence presenceFromElement:element]];
 		}
 		else if ([self isP2P] &&
-				([elementName isEqualToString:@"stream:features"] || [elementName isEqualToString:@"features"]))
+		        ([elementName isEqualToString:@"stream:features"] || [elementName isEqualToString:@"features"]))
 		{
 			[multicastDelegate xmppStream:self didReceiveP2PFeatures:element];
+		}
+		else if ([customElementNames countForObject:elementName])
+		{
+			[multicastDelegate xmppStream:self didReceiveCustomElement:element];
 		}
 		else
 		{
